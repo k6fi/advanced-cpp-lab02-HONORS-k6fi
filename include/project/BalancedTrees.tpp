@@ -5,18 +5,26 @@ namespace project {
 template <typename Key, typename Value, typename Compare>
 int AVLTree<Key, Value, Compare>::nodeHeight(const Node* n) {
     // TODO: return the height of n, treating a null child consistently.
-    return 0;
+    return n ? n->height : 0;
 }
 
 template <typename Key, typename Value, typename Compare>
 int AVLTree<Key, Value, Compare>::balanceFactor(const Node* n) {
     // TODO: return height(left) - height(right).
-    return 0;
+    if (!n) {
+        return 0;
+    }
+    return nodeHeight(n->left) - nodeHeight(n->right);
 }
 
 template <typename Key, typename Value, typename Compare>
 void AVLTree<Key, Value, Compare>::destroy(Node* n) {
     // TODO: recursively destroy all nodes.
+    if (n) {
+        destroy(n->left);
+        destroy(n->right);
+        delete n;
+    }
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -28,12 +36,22 @@ template <typename Key, typename Value, typename Compare>
 AVLTree<Key, Value, Compare>::AVLTree(AVLTree&& other) noexcept
     : root_(other.root_), size_(other.size_), comp_(std::move(other.comp_)) {
     // TODO: leave other in a valid empty state.
+    other.root_ = nullptr;
+    other.size_ = 0;
 }
 
 template <typename Key, typename Value, typename Compare>
 AVLTree<Key, Value, Compare>&
 AVLTree<Key, Value, Compare>::operator=(AVLTree&& other) noexcept {
     // TODO: release current nodes, transfer ownership, and empty other.
+    if (this != &other) {
+        destroy(root_);
+        root_ = other.root_;
+        size_ = other.size_;
+        comp_ = std::move(other.comp_);
+        other.root_ = nullptr;
+        other.size_ = 0;
+    }
     return *this;
 }
 
@@ -56,20 +74,63 @@ template <typename Key, typename Value, typename Compare>
 typename AVLTree<Key, Value, Compare>::Node*
 AVLTree<Key, Value, Compare>::rotateLeft(Node* x) {
     // TODO: perform a left rotation and update heights.
-    return x;
+    Node* y = x->right;
+    Node* T2 = y->left;
+  
+    y->left = x;
+    x->right = T2;
+
+   
+    x->height = std::max(nodeHeight(x->left), nodeHeight(x->right)) + 1;
+    y->height = std::max(nodeHeight(y->left), nodeHeight(y->right)) + 1;
+
+    return y;
 }
 
 template <typename Key, typename Value, typename Compare>
 typename AVLTree<Key, Value, Compare>::Node*
 AVLTree<Key, Value, Compare>::rotateRight(Node* y) {
     // TODO: perform a right rotation and update heights.
-    return y;
+    Node* x = y->left;
+    Node* T2 = x->right;   
+
+    y->left = T2;
+    x->right = y;
+
+    // Update heights
+    y->height = std::max(nodeHeight(y->left), nodeHeight(y->right)) + 1;
+    x->height = std::max(nodeHeight(x->left), nodeHeight(x->right)) + 1;
+
+    return x;
 }
 
 template <typename Key, typename Value, typename Compare>
 typename AVLTree<Key, Value, Compare>::Node*
 AVLTree<Key, Value, Compare>::rebalance(Node* n) {
     // TODO: update height and handle LL, RR, LR, and RL cases.
+   if (!n) {
+        return nullptr;
+    }
+
+    n->height = 1 + std::max(nodeHeight(n->left),
+      nodeHeight(n->right));
+
+    int balance = balanceFactor(n);
+
+    if (balance > 1) {
+        if (balanceFactor(n->left) < 0) {
+            n->left = rotateLeft(n->left);
+        }
+        return rotateRight(n);
+    }
+
+    if (balance < -1) {
+        if (balanceFactor(n->right) > 0) {
+            n->right = rotateRight(n->right);
+        }
+        return rotateLeft(n);
+    }
+
     return n;
 }
 
@@ -78,7 +139,20 @@ typename AVLTree<Key, Value, Compare>::Node*
 AVLTree<Key, Value, Compare>::insert(Node* n, const Key& key,
                                      const Value& value, bool& inserted) {
     // TODO: standard BST insertion followed by AVL rebalancing.
-    return n;
+    if (!n) {
+        inserted = true;
+        return new Node(key, value);
+    }
+    if (comp_(key, n->key)) {
+        n->left = insert(n->left, key, value, inserted);
+    } else if (comp_(n->key, key)) {
+        n->right = insert(n->right, key, value, inserted);
+    } else {
+        n->value = value;
+        inserted = false;
+        return n;
+    }
+    return rebalance(n);
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -94,6 +168,12 @@ template <typename Key, typename Value, typename Compare>
 typename AVLTree<Key, Value, Compare>::Node*
 AVLTree<Key, Value, Compare>::minimum(Node* n) {
     // TODO: return the leftmost node.
+    if (!n) {
+        return nullptr;
+    }
+    while (n->left) {
+        n = n->left;
+    }
     return n;
 }
 
@@ -101,7 +181,28 @@ template <typename Key, typename Value, typename Compare>
 typename AVLTree<Key, Value, Compare>::Node*
 AVLTree<Key, Value, Compare>::erase(Node* n, const Key& key, bool& removed) {
     // TODO: standard BST deletion followed by AVL rebalancing.
-    return n;
+    if (!n) {
+        removed = false;
+        return n;
+    }
+    if (comp_(key, n->key)) {
+        n->left = erase(n->left, key, removed);
+    } else if (comp_(n->key, key)) {
+        n->right = erase(n->right, key, removed);
+    } else {
+        removed = true;
+        if (!n->left || !n->right) {
+            Node* temp = n->left ? n->left : n->right;
+            if (!temp) {
+                temp = n;
+                n = nullptr;
+            } else {
+                *n = *temp;
+                delete temp;
+            }
+        }
+    }
+    return rebalance(n);
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -118,6 +219,15 @@ template <typename Key, typename Value, typename Compare>
 const typename AVLTree<Key, Value, Compare>::Node*
 AVLTree<Key, Value, Compare>::findNode(const Node* n, const Key& key) const {
     // TODO: perform ordered search.
+    while (n) {
+        if (comp_(key, n->key)) {
+            n = n->left;
+        } else if (comp_(n->key, key)) {
+            n = n->right;
+        } else {
+            return n;
+        }
+    }
     return nullptr;
 }
 
@@ -136,6 +246,11 @@ template <typename Key, typename Value, typename Compare>
 void AVLTree<Key, Value, Compare>::inorder(const Node* n,
                                            std::vector<Key>& out) {
     // TODO: append keys in sorted order.
+    if (n) {
+        inorder(n->left, out);
+        out.push_back(n->key);
+        inorder(n->right, out);
+    }
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -164,6 +279,11 @@ bool AVLTree<Key, Value, Compare>::isValidAVL() const {
 template <typename Key, typename Value, typename Compare>
 void SplayTree<Key, Value, Compare>::destroy(Node* n) {
     // TODO: recursively destroy nodes.
+    if (n) {
+        destroy(n->left);
+        destroy(n->right);
+        delete n;
+    }
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -175,12 +295,20 @@ template <typename Key, typename Value, typename Compare>
 SplayTree<Key, Value, Compare>::SplayTree(SplayTree&& other) noexcept
     : root_(other.root_), size_(other.size_), comp_(std::move(other.comp_)) {
     // TODO: leave other empty.
+    other.root_ = nullptr;
+    other.size_ = 0;
 }
 
 template <typename Key, typename Value, typename Compare>
 SplayTree<Key, Value, Compare>&
 SplayTree<Key, Value, Compare>::operator=(SplayTree&& other) noexcept {
     // TODO: release current nodes, transfer ownership, and empty other.
+    destroy(root_);
+    root_ = other.root_;
+    size_ = other.size_;
+    comp_ = std::move(other.comp_);
+    other.root_ = nullptr;
+    other.size_ = 0;
     return *this;
 }
 
@@ -196,17 +324,86 @@ std::size_t SplayTree<Key, Value, Compare>::size() const noexcept {
 
 template <typename Key, typename Value, typename Compare>
 void SplayTree<Key, Value, Compare>::rotateLeft(Node* x) {
-    // TODO: implement a parent-aware left rotation.
+    // TODO: implement a parent-aware left rotation.    
+    if (!x || !x->right) {
+        return;
+    }
+    Node* y = x->right;
+    x->right = y->left;
+    if (y->left) {
+        y->left->parent = x;
+    }
+    y->parent = x->parent;
+    if (!x->parent) {
+        root_ = y;
+    } else if (x == x->parent->left) {
+        x->parent->left = y;
+    } else {
+        x->parent->right = y;
+    }
+    y->left = x;
+    x->parent = y;
 }
 
 template <typename Key, typename Value, typename Compare>
 void SplayTree<Key, Value, Compare>::rotateRight(Node* x) {
     // TODO: implement a parent-aware right rotation.
+    if (!x || !x->left) {
+        return;
+    }
+    Node* y = x->left;
+    x->left = y->right;
+    if (y->right) {
+        y->right->parent = x;
+    }
+    y->parent = x->parent;
+    if (!x->parent) {
+        root_ = y;
+    } else if (x == x->parent->right) {
+        x->parent->right = y;
+    } else {
+        x->parent->left = y;
+    }
+    y->right = x;
+    x->parent = y;
 }
 
 template <typename Key, typename Value, typename Compare>
 void SplayTree<Key, Value, Compare>::splay(Node* x) {
     // TODO: implement zig, zig-zig, and zig-zag cases until x is root.
+    if (!x) {
+        return;
+    }
+
+    while (x->parent) {
+        Node* p = x->parent;
+        Node* g = p->parent;
+
+        if (!g) {
+            // Zig
+            if (x == p->left) {
+                rotateRight(p);
+            } else {
+                rotateLeft(p);
+            }
+        }
+        else if (x == p->left && p == g->left) {
+            rotateRight(g);
+            rotateRight(p);
+        }
+        else if (x == p->right && p == g->right) {
+            rotateLeft(g);
+            rotateLeft(p);
+        }
+        else if (x == p->right && p == g->left) {
+            rotateLeft(p);
+            rotateRight(g);
+        }
+        else {
+            rotateRight(p);
+            rotateLeft(g);
+        }
+    }
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -214,7 +411,27 @@ typename SplayTree<Key, Value, Compare>::Node*
 SplayTree<Key, Value, Compare>::findNode(const Key& key) {
     // TODO: search for key, remembering the last accessed node,
     // then splay the found node or last accessed node.
-    return nullptr;
+Node* current = root_;
+    Node* lastAccessed = nullptr;
+
+    while (current) {
+        lastAccessed = current;
+        if (comp_(key, current->key)) {
+            current = current->left;
+        } else if (comp_(current->key, key)) {
+            current = current->right;
+        } else {
+            splay(current);
+            return current; // Key found
+        }
+    }
+
+    
+    if (lastAccessed) {
+        splay(lastAccessed);
+    }
+    return nullptr; 
+    
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -229,30 +446,123 @@ const Value* SplayTree<Key, Value, Compare>::find(const Key& key) {
 }
 
 template <typename Key, typename Value, typename Compare>
-void SplayTree<Key, Value, Compare>::insert(const Key& key,
-                                            const Value& value) {
+void SplayTree<Key, Value, Compare>::insert(const Key& key,const Value& value) {
     // TODO: insert as a BST node and splay the inserted/found node.
+    if (!root_) {
+        root_ = new Node(key, value);
+        ++size_;
+        return;
+    }
+
+    Node* current = root_;
+    Node* parent = nullptr;
+
+    while (current) {
+        parent = current;
+
+        if (comp_(key, current->key)) {
+            current = current->left;
+        }
+        else if (comp_(current->key, key)) {
+            current = current->right;
+        }
+        else {
+        
+            current->value = value;
+            splay(current);
+            return;
+        }
+    }
+
+    // Create a new node
+    Node* newNode = new Node(key, value);
+    newNode->parent = parent;
+
+    if (comp_(key, parent->key)) {
+        parent->left = newNode;
+    }
+    else {
+        parent->right = newNode;
+    }
+
+    ++size_;
+
+    splay(newNode);
 }
 
 template <typename Key, typename Value, typename Compare>
 void SplayTree<Key, Value, Compare>::transplant(Node* u, Node* v) {
     // TODO: replace subtree u with v while maintaining parent pointers.
+    if (!u->parent) {
+        root_ = v;
+    } else if (u == u->parent->left) {
+        u->parent->left = v;
+    } else {
+        u->parent->right = v;
+    }
+    if (v) {
+        v->parent = u->parent;
+    }
 }
 
 template <typename Key, typename Value, typename Compare>
 typename SplayTree<Key, Value, Compare>::Node*
 SplayTree<Key, Value, Compare>::subtreeMinimum(Node* n) {
     // TODO: return leftmost node.
-    return n;
+    Node* current = n;
+    while (current && current->left) {
+        current = current->left;
+    }
+    return current;
 }
 
 template <typename Key, typename Value, typename Compare>
 bool SplayTree<Key, Value, Compare>::erase(const Key& key) {
     // TODO: splay the target to the root, remove it, and join the
     // left/right subtrees correctly.
-    return false;
-}
+    
+ Node* target = findNode(key);
 
+    if (!target) {
+        return false;
+    }
+
+    Node* leftTree = root_->left;
+    Node* rightTree = root_->right;
+
+    if (leftTree) {
+        leftTree->parent = nullptr;
+    }
+
+    if (rightTree) {
+        rightTree->parent = nullptr;
+    }
+
+    delete root_;
+    --size_;
+
+    if (!leftTree) {
+        root_ = rightTree;
+        return true;
+    }
+
+    root_ = leftTree;
+
+    Node* maximum = leftTree;
+    while (maximum->right) {
+        maximum = maximum->right;
+    }
+
+    splay(maximum);
+
+    root_->right = rightTree;
+
+    if (rightTree) {
+        rightTree->parent = root_;
+    }
+
+    return true;
+}
 template <typename Key, typename Value, typename Compare>
 const Key* SplayTree<Key, Value, Compare>::rootKey() const noexcept {
     return root_ ? &root_->key : nullptr;
@@ -261,7 +571,12 @@ const Key* SplayTree<Key, Value, Compare>::rootKey() const noexcept {
 template <typename Key, typename Value, typename Compare>
 void SplayTree<Key, Value, Compare>::inorder(const Node* n,
                                              std::vector<Key>& out) {
-    // TODO: append keys in sorted order.
+    // TODO: append keys in sorted order
+    if (n) {
+        inorder(n->left, out);
+        out.push_back(n->key);
+        inorder(n->right, out);
+    }
 }
 
 template <typename Key, typename Value, typename Compare>
@@ -273,8 +588,13 @@ std::vector<Key> SplayTree<Key, Value, Compare>::inorder() const {
 
 template <typename Key, typename Value, typename Compare>
 std::size_t SplayTree<Key, Value, Compare>::depth(const Node* n) {
-    // TODO: compute subtree height/depth.
-    return 0;
+    // TODO: compute subtree height/depth
+    if (!n) {
+        return 0;
+    }
+    std::size_t leftDepth = depth(n->left);
+    std::size_t rightDepth = depth(n->right);
+    return 1 + std::max(leftDepth, rightDepth);
 }
 
 template <typename Key, typename Value, typename Compare>
